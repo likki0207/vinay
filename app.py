@@ -1,74 +1,69 @@
-# Import statements
 import streamlit as st
-import numpy as np
 import pandas as pd
+import base64
 import matplotlib.pyplot as plt
 import seaborn as sns
-from PIL import Image
+import numpy as np
 
+st.title('NFL Football Stats (Rushing) Explorer')
 
-#Title and Subheader
-st.title("Life Expectancy By Country")
-st.write("Life Expectancy Data of India and USA from the year 1960 till 2016.")
+st.markdown("""
+This app performs simple webscraping of NFL Football player stats data (focusing on Rushing)!
+* **Python libraries:** base64, pandas, streamlit, numpy, matplotlib, seaborn
+* **Data source:** [pro-football-reference.com](https://www.pro-football-reference.com/).
+""")
 
-# Multicolumn Support (add relative path to the image)
-col1, col2 = st.beta_columns(2)
-IN_flag = Image.open(r"xxxxxxxxxxxxxxx")
-col1.header("INDIA")
-col1.image(IN_flag, use_column_width=True)
+st.sidebar.header('User Input Features')
+selected_year = st.sidebar.selectbox('Year', list(reversed(range(1990,2020))))
 
-US_flag = Image.open(r"xxxxxxxxxxxxxxxx")
-col2.header("USA")
-col2.image(US_flag, use_column_width=True)
+# Web scraping of NFL player stats
+# https://www.pro-football-reference.com/years/2019/rushing.htm
+@st.cache
+def load_data(year):
+    url = "https://www.pro-football-reference.com/years/" + str(year) + "/rushing.htm"
+    html = pd.read_html(url, header = 1)
+    df = html[0]
+    raw = df.drop(df[df.Age == 'Age'].index) # Deletes repeating headers in content
+    raw = raw.fillna(0)
+    playerstats = raw.drop(['Rk'], axis=1)
+    return playerstats
+playerstats = load_data(selected_year)
 
-# reading a csv and displaying the first six rows on the screen.
-df = pd.read_csv('lf.csv')
-st.write(df.head())
+# Sidebar - Team selection
+sorted_unique_team = sorted(playerstats.Tm.unique())
+selected_team = st.sidebar.multiselect('Team', sorted_unique_team, sorted_unique_team)
 
-# Display full data base on checkbox.
-if st.checkbox('show full data'):
-    df
-    
-# Display Code
-st.write('Displaying Code in Streamlit app')
-with st.echo():
-    # square function
-    def square(x):
-        print(x*x)
-    # cube function
-    def cube(x):
-        print(x*x*x)
-    square(5) #output 25
-    cube(5) # output 125  
-# Sidebar Column
-st.sidebar.title('Sidebar Widgets')
+# Sidebar - Position selection
+unique_pos = ['RB','QB','WR','FB','TE']
+selected_pos = st.sidebar.multiselect('Position', unique_pos, unique_pos)
 
-rating = st.sidebar.radio('Are You Happy with the Example',('Yes','No','Not Sure'))
-if rating == 'Yes':
-    st.sidebar.success('Thank You for Selecting Yes')
-elif rating =='No':
-    st.sidebar.info('Thank You for Selecting No')
-elif rating =='Not Sure':
-    st.sidebar.info('Thank You for Selecting Not sure')
+# Filtering data
+df_selected_team = playerstats[(playerstats.Tm.isin(selected_team)) & (playerstats.Pos.isin(selected_pos))]
 
-rating = st.sidebar.selectbox("How much would you rate this App? ",
-                     ['5 Stars', '4 Stars', '3 Stars','2 Stars','1 Star'])
+st.header('Display Player Stats of Selected Team(s)')
+st.write('Data Dimension: ' + str(df_selected_team.shape[0]) + ' rows and ' + str(df_selected_team.shape[1]) + ' columns.')
+st.dataframe(df_selected_team)
 
-st.sidebar.success(rating)
+# Download NBA player stats data
+# https://discuss.streamlit.io/t/how-to-download-file-in-streamlit/1806
+def filedownload(df):
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()  # strings <-> bytes conversions
+    href = f'<a href="data:file/csv;base64,{b64}" download="playerstats.csv">Download CSV File</a>'
+    return href
 
-st.sidebar.write('Find Square of a Number')
-get_number = st.sidebar.slider("Select a Number", 1, 10)
-st.sidebar.write('Square of Number',get_number, 'is', get_number*get_number)
-# displaying API data
-API_URL = 'https://cleanuri.com/api/v1/shorten'
-st.subheader('URL SHORTNER')
-_url = st.text_input('Enter URL')
-pressed = st.button('Get Short Link')
+st.markdown(filedownload(df_selected_team), unsafe_allow_html=True)
 
-if pressed:
-    if _url !='':
-        data = {'url': _url}
-        r = requests.post(API_URL, data=data)
-        st.write(r.json())
-    else:
-        st.write('Please enter the right URL first')
+# Heatmap
+if st.button('Intercorrelation Heatmap'):
+    st.header('Intercorrelation Matrix Heatmap')
+    df_selected_team.to_csv('output.csv',index=False)
+    df = pd.read_csv('output.csv')
+
+    corr = df.corr()
+    mask = np.zeros_like(corr)
+    mask[np.triu_indices_from(mask)] = True
+    with sns.axes_style("white"):
+        f, ax = plt.subplots(figsize=(7, 5))
+        ax = sns.heatmap(corr, mask=mask, vmax=1, square=True)
+    st.pyplot()

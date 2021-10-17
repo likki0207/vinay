@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-st.title('NFL Football Stats Explorer')
+st.title('NFL Football Statistics')
 
 st.sidebar.header('User Input Features')
 selected_year = st.sidebar.selectbox('Year', list(reversed(range(1990,2020))))
@@ -32,7 +32,7 @@ selected_pos = st.sidebar.multiselect('Position', unique_pos, unique_pos)
 # Filtering data
 df_selected_team = playerstats[(playerstats.Tm.isin(selected_team)) & (playerstats.Pos.isin(selected_pos))]
 
-st.header('Display Player Stats of Selected Team(s)')
+st.header('Player Stats of Selected Teams')
 st.write('Data Dimension: ' + str(df_selected_team.shape[0]) + ' rows and ' + str(df_selected_team.shape[1]) + ' columns.')
 st.dataframe(df_selected_team)
 

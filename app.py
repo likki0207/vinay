@@ -4,79 +4,65 @@ import base64
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-import yfinance as yf
 
-st.title('S&P 500 App')
+st.title('NBA Player Stats Explorer')
 
 st.markdown("""
-This app retrieves the list of the **S&P 500** (from Wikipedia) and its corresponding **stock closing price** (year-to-date)!
-* **Python libraries:** base64, pandas, streamlit, numpy, matplotlib, seaborn
-* **Data source:** [Wikipedia](https://en.wikipedia.org/wiki/List_of_S%26P_500_companies).
+This app performs simple webscraping of NBA player stats data!
+* **Python libraries:** base64, pandas, streamlit
+* **Data source:** [Basketball-reference.com](https://www.basketball-reference.com/).
 """)
 
 st.sidebar.header('User Input Features')
+selected_year = st.sidebar.selectbox('Year', list(reversed(range(1950,2020))))
 
-# Web scraping of S&P 500 data
-#
+# Web scraping of NBA player stats
 @st.cache
-def load_data():
-    url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+def load_data(year):
+    url = "https://www.basketball-reference.com/leagues/NBA_" + str(year) + "_per_game.html"
     html = pd.read_html(url, header = 0)
     df = html[0]
-    return df
+    raw = df.drop(df[df.Age == 'Age'].index) # Deletes repeating headers in content
+    raw = raw.fillna(0)
+    playerstats = raw.drop(['Rk'], axis=1)
+    return playerstats
+playerstats = load_data(selected_year)
 
-df = load_data()
-sector = df.groupby('GICS Sector')
+# Sidebar - Team selection
+sorted_unique_team = sorted(playerstats.Tm.unique())
+selected_team = st.sidebar.multiselect('Team', sorted_unique_team, sorted_unique_team)
 
-# Sidebar - Sector selection
-sorted_sector_unique = sorted( df['GICS Sector'].unique() )
-selected_sector = st.sidebar.multiselect('Sector', sorted_sector_unique, sorted_sector_unique)
+# Sidebar - Position selection
+unique_pos = ['C','PF','SF','PG','SG']
+selected_pos = st.sidebar.multiselect('Position', unique_pos, unique_pos)
 
 # Filtering data
-df_selected_sector = df[ (df['GICS Sector'].isin(selected_sector)) ]
+df_selected_team = playerstats[(playerstats.Tm.isin(selected_team)) & (playerstats.Pos.isin(selected_pos))]
 
-st.header('Display Companies in Selected Sector')
-st.write('Data Dimension: ' + str(df_selected_sector.shape[0]) + ' rows and ' + str(df_selected_sector.shape[1]) + ' columns.')
-st.dataframe(df_selected_sector)
+st.header('Display Player Stats of Selected Team(s)')
+st.write('Data Dimension: ' + str(df_selected_team.shape[0]) + ' rows and ' + str(df_selected_team.shape[1]) + ' columns.')
+st.dataframe(df_selected_team)
 
-# Download S&P500 data
+# Download NBA player stats data
 # https://discuss.streamlit.io/t/how-to-download-file-in-streamlit/1806
 def filedownload(df):
     csv = df.to_csv(index=False)
     b64 = base64.b64encode(csv.encode()).decode()  # strings <-> bytes conversions
-    href = f'<a href="data:file/csv;base64,{b64}" download="SP500.csv">Download CSV File</a>'
+    href = f'<a href="data:file/csv;base64,{b64}" download="playerstats.csv">Download CSV File</a>'
     return href
 
-st.markdown(filedownload(df_selected_sector), unsafe_allow_html=True)
+st.markdown(filedownload(df_selected_team), unsafe_allow_html=True)
 
-# https://pypi.org/project/yfinance/
+# Heatmap
+if st.button('Intercorrelation Heatmap'):
+    st.header('Intercorrelation Matrix Heatmap')
+    df_selected_team.to_csv('output.csv',index=False)
+    df = pd.read_csv('output.csv')
 
-data = yf.download(
-        tickers = list(df_selected_sector[:10].Symbol),
-        period = "ytd",
-        interval = "1d",
-        group_by = 'ticker',
-        auto_adjust = True,
-        prepost = True,
-        threads = True,
-        proxy = None
-    )
-
-# Plot Closing Price of Query Symbol
-def price_plot(symbol):
-  df = pd.DataFrame(data[symbol].Close)
-  df['Date'] = df.index
-  plt.fill_between(df.Date, df.Close, color='skyblue', alpha=0.3)
-  plt.plot(df.Date, df.Close, color='skyblue', alpha=0.8)
-  plt.xticks(rotation=90)
-  plt.title(symbol, fontweight='bold')
-  plt.xlabel('Date', fontweight='bold')
-  plt.ylabel('Closing Price', fontweight='bold')
-  return st.pyplot()
-
-num_company = st.sidebar.slider('Number of Companies', 1, 5)
-
-if st.button('Show Plots'):
-    st.header('Stock Closing Price')
-    for i in list(df_selected_sector.Symbol)[:num_company]:
-        price_plot(i)
+    corr = df.corr()
+    mask = np.zeros_like(corr)
+    mask[np.triu_indices_from(mask)] = True
+    with sns.axes_style("white"):
+        f, ax = plt.subplots(figsize=(7, 5))
+        ax = sns.heatmap(corr, mask=mask, vmax=1, square=True)
+    st.pyplot()

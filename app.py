@@ -1,69 +1,89 @@
-import streamlit as st
 import pandas as pd
-import base64
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
+import streamlit as st
+import altair as alt
+from PIL import Image
 
-st.title('NFL Football Stats (Rushing) Explorer')
+######################
+# Page Title
+######################
 
-st.markdown("""
-This app performs simple webscraping of NFL Football player stats data (focusing on Rushing)!
-* **Python libraries:** base64, pandas, streamlit, numpy, matplotlib, seaborn
-* **Data source:** [pro-football-reference.com](https://www.pro-football-reference.com/).
+image = Image.open('dna-logo.jpg')
+
+st.image(image, use_column_width=True)
+
+st.write("""
+# DNA Nucleotide Count Web App
+This app counts the nucleotide composition of query DNA!
+***
 """)
 
-st.sidebar.header('User Input Features')
-selected_year = st.sidebar.selectbox('Year', list(reversed(range(1990,2020))))
 
-# Web scraping of NFL player stats
-# https://www.pro-football-reference.com/years/2019/rushing.htm
-@st.cache
-def load_data(year):
-    url = "https://www.pro-football-reference.com/years/" + str(year) + "/rushing.htm"
-    html = pd.read_html(url, header = 1)
-    df = html[0]
-    raw = df.drop(df[df.Age == 'Age'].index) # Deletes repeating headers in content
-    raw = raw.fillna(0)
-    playerstats = raw.drop(['Rk'], axis=1)
-    return playerstats
-playerstats = load_data(selected_year)
+######################
+# Input Text Box
+######################
 
-# Sidebar - Team selection
-sorted_unique_team = sorted(playerstats.Tm.unique())
-selected_team = st.sidebar.multiselect('Team', sorted_unique_team, sorted_unique_team)
+#st.sidebar.header('Enter DNA sequence')
+st.header('Enter DNA sequence')
 
-# Sidebar - Position selection
-unique_pos = ['RB','QB','WR','FB','TE']
-selected_pos = st.sidebar.multiselect('Position', unique_pos, unique_pos)
+sequence_input = ">DNA Query 2\nGAACACGTGGAGGCAAACAGGAAGGTGAAGAAGAACTTATCCTATCAGGACGGAAGGTCCTGTGCTCGGG\nATCTTCCAGACGTCGCGACTCTAAATTGCCCCCTCTGAGGTCAAGGAACACAAGATGGTTTTGGAAATGC\nTGAACCCGATACATTATAACATCACCAGCATCGTGCCTGAAGCCATGCCTGCTGCCACCATGCCAGTCCT"
 
-# Filtering data
-df_selected_team = playerstats[(playerstats.Tm.isin(selected_team)) & (playerstats.Pos.isin(selected_pos))]
+#sequence = st.sidebar.text_area("Sequence input", sequence_input, height=250)
+sequence = st.text_area("Sequence input", sequence_input, height=250)
+sequence = sequence.splitlines()
+sequence = sequence[1:] # Skips the sequence name (first line)
+sequence = ''.join(sequence) # Concatenates list to string
 
-st.header('Display Player Stats of Selected Team(s)')
-st.write('Data Dimension: ' + str(df_selected_team.shape[0]) + ' rows and ' + str(df_selected_team.shape[1]) + ' columns.')
-st.dataframe(df_selected_team)
+st.write("""
+***
+""")
 
-# Download NBA player stats data
-# https://discuss.streamlit.io/t/how-to-download-file-in-streamlit/1806
-def filedownload(df):
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()  # strings <-> bytes conversions
-    href = f'<a href="data:file/csv;base64,{b64}" download="playerstats.csv">Download CSV File</a>'
-    return href
+## Prints the input DNA sequence
+st.header('INPUT (DNA Query)')
+sequence
 
-st.markdown(filedownload(df_selected_team), unsafe_allow_html=True)
+## DNA nucleotide count
+st.header('OUTPUT (DNA Nucleotide Count)')
 
-# Heatmap
-if st.button('Intercorrelation Heatmap'):
-    st.header('Intercorrelation Matrix Heatmap')
-    df_selected_team.to_csv('output.csv',index=False)
-    df = pd.read_csv('output.csv')
+### 1. Print dictionary
+st.subheader('1. Print dictionary')
+def DNA_nucleotide_count(seq):
+  d = dict([
+            ('A',seq.count('A')),
+            ('T',seq.count('T')),
+            ('G',seq.count('G')),
+            ('C',seq.count('C'))
+            ])
+  return d
 
-    corr = df.corr()
-    mask = np.zeros_like(corr)
-    mask[np.triu_indices_from(mask)] = True
-    with sns.axes_style("white"):
-        f, ax = plt.subplots(figsize=(7, 5))
-        ax = sns.heatmap(corr, mask=mask, vmax=1, square=True)
-    st.pyplot()
+X = DNA_nucleotide_count(sequence)
+
+#X_label = list(X)
+#X_values = list(X.values())
+
+X
+
+### 2. Print text
+st.subheader('2. Print text')
+st.write('There are  ' + str(X['A']) + ' adenine (A)')
+st.write('There are  ' + str(X['T']) + ' thymine (T)')
+st.write('There are  ' + str(X['G']) + ' guanine (G)')
+st.write('There are  ' + str(X['C']) + ' cytosine (C)')
+
+### 3. Display DataFrame
+st.subheader('3. Display DataFrame')
+df = pd.DataFrame.from_dict(X, orient='index')
+df = df.rename({0: 'count'}, axis='columns')
+df.reset_index(inplace=True)
+df = df.rename(columns = {'index':'nucleotide'})
+st.write(df)
+
+### 4. Display Bar Chart using Altair
+st.subheader('4. Display Bar chart')
+p = alt.Chart(df).mark_bar().encode(
+    x='nucleotide',
+    y='count'
+)
+p = p.properties(
+    width=alt.Step(80)  # controls width of bar.
+)
+st.write(p)
